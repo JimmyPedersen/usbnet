@@ -5,6 +5,7 @@
 #include <lwip/ip_addr.h>
 #include <lwip/sys.h>
 #include <lwip/udp.h>
+#include <string.h>
 #include <stdio.h>
 
 static void *iperf_session;
@@ -20,8 +21,16 @@ static uint32_t udp_session_start_ms;
 static uint32_t udp_last_packet_ms;
 static uint32_t udp_session_packets;
 static uint32_t udp_session_bytes;
+static uint32_t udp_max_seq;
+static uint32_t udp_out_of_order;
+static bool udp_seq_initialized;
 
 #define UDP_SESSION_IDLE_TIMEOUT_MS 1500
+#define IPERF2_HEADER_VERSION1 0x80000000UL
+
+typedef struct {
+  uint32_t words[26];
+} iperf2_udp_ack_t;
 
 static const char *report_type_str(enum lwiperf_report_type report_type) {
   switch (report_type) {
@@ -88,6 +97,56 @@ static void iperf_udp_finalize_session(const char *reason, uint32_t now_ms) {
   udp_session_active = false;
 }
 
+static void iperf_udp_send_ackfin(const ip_addr_t *addr, uint16_t port, uint32_t last_seq, uint32_t now_ms) {
+  iperf2_udp_ack_t ack;
+  memset(&ack, 0, sizeof(ack));
+
+  uint32_t duration_ms = now_ms - udp_session_start_ms;
+  if (duration_ms == 0) {
+    duration_ms = 1;
+  }
+
+  uint32_t error_cnt = 0;
+  if (udp_seq_initialized && (udp_max_seq + 1U > udp_session_packets)) {
+    error_cnt = (udp_max_seq + 1U) - udp_session_packets;
+  }
+
+  uint32_t stop_sec = duration_ms / 1000U;
+  uint32_t stop_usec = (duration_ms % 1000U) * 1000U;
+
+  // UDP_datagram words expected before server_hdr.
+  ack.words[0] = lwip_htonl(last_seq | 0x80000000UL); // id
+  ack.words[1] = 0; // tv_sec
+  ack.words[2] = 0; // tv_usec
+  ack.words[3] = 0; // id2
+
+  // server_hdr_v1 words.
+  ack.words[4] = lwip_htonl(IPERF2_HEADER_VERSION1); // flags
+  ack.words[5] = 0; // total_len1
+  ack.words[6] = lwip_htonl(udp_session_bytes); // total_len2
+  ack.words[7] = lwip_htonl(stop_sec);
+  ack.words[8] = lwip_htonl(stop_usec);
+  ack.words[9] = lwip_htonl(error_cnt);
+  ack.words[10] = lwip_htonl(udp_out_of_order);
+  ack.words[11] = lwip_htonl(udp_session_packets); // datagrams
+  ack.words[12] = 0; // datagrams2 when seqno64 is enabled on client
+  ack.words[13] = 0; // jitter1
+  ack.words[14] = 0; // jitter2
+
+  struct pbuf *resp = pbuf_alloc(PBUF_TRANSPORT, sizeof(ack), PBUF_RAM);
+  if (resp == NULL) {
+    printf("iperf-udp: AckFIN alloc failed\n");
+    return;
+  }
+
+  memcpy(resp->payload, &ack, sizeof(ack));
+  err_t send_err = udp_sendto(iperf_udp_pcb, resp, addr, port);
+  pbuf_free(resp);
+  if (send_err != ERR_OK) {
+    printf("iperf-udp: AckFIN send failed err=%d\n", (int)send_err);
+  }
+}
+
 static void iperf_udp_recv_cb(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, uint16_t port) {
   (void)arg;
   (void)upcb;
@@ -110,21 +169,39 @@ static void iperf_udp_recv_cb(void *arg, struct udp_pcb *upcb, struct pbuf *p, c
     udp_last_packet_ms = now_ms;
     udp_session_packets = 0;
     udp_session_bytes = 0;
+    udp_max_seq = 0;
+    udp_out_of_order = 0;
+    udp_seq_initialized = false;
     iperf_status.udp_total_sessions++;
     iperf_status.udp_active = true;
   }
 
   udp_last_packet_ms = now_ms;
-  udp_session_packets++;
   udp_session_bytes += p->tot_len;
 
   if (p->tot_len >= sizeof(uint32_t)) {
-    uint32_t seq_net = 0;
-    pbuf_copy_partial(p, &seq_net, sizeof(seq_net), 0);
-    int32_t seq = (int32_t)lwip_ntohl(seq_net);
-    if (seq < 0) {
+    uint32_t seq_raw = 0;
+    pbuf_copy_partial(p, &seq_raw, sizeof(seq_raw), 0);
+    seq_raw = lwip_ntohl(seq_raw);
+    bool is_final = (seq_raw & 0x80000000UL) != 0;
+    uint32_t seq = seq_raw & 0x7FFFFFFFUL;
+
+    if (is_final) {
+      iperf_udp_send_ackfin(addr, port, seq, now_ms);
       iperf_udp_finalize_session("end", now_ms);
+    } else {
+      udp_session_packets++;
+      if (!udp_seq_initialized) {
+        udp_seq_initialized = true;
+        udp_max_seq = seq;
+      } else if (seq > udp_max_seq) {
+        udp_max_seq = seq;
+      } else {
+        udp_out_of_order++;
+      }
     }
+  } else {
+    udp_session_packets++;
   }
 
   pbuf_free(p);
