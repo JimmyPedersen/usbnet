@@ -90,10 +90,23 @@ typedef struct {
     uint8_t options[312]; // optional parameters, variable, starts with magic
 } dhcp_msg_t;
 
+/**
+ * @brief Return the number of milliseconds elapsed since boot.
+ *
+ * @return Current system time in milliseconds.
+ */
 static inline uint32_t get_ticks_ms(void) {
   return to_ms_since_boot(get_absolute_time());
 }
 
+/**
+ * @brief Allocate a new UDP socket and register a receive callback.
+ *
+ * @param udp          Output; set to the newly allocated udp_pcb on success.
+ * @param cb_data      User data pointer forwarded to @p cb_udp_recv.
+ * @param cb_udp_recv  Receive callback to register on the new socket.
+ * @return 0 on success, -ENOMEM if udp_new() failed.
+ */
 static int dhcp_socket_new_dgram(struct udp_pcb **udp, void *cb_data, udp_recv_fn cb_udp_recv) {
   // family is AF_INET
   // type is SOCK_DGRAM
@@ -109,6 +122,11 @@ static int dhcp_socket_new_dgram(struct udp_pcb **udp, void *cb_data, udp_recv_f
   return 0; // success
 }
 
+/**
+ * @brief Remove and free a UDP socket, setting the caller's pointer to NULL.
+ *
+ * @param udp Pointer to the udp_pcb pointer to free; safe to call when already NULL.
+ */
 static void dhcp_socket_free(struct udp_pcb **udp) {
   if (*udp != NULL) {
     udp_remove(*udp);
@@ -116,11 +134,33 @@ static void dhcp_socket_free(struct udp_pcb **udp) {
   }
 }
 
+/**
+ * @brief Bind a UDP socket to a local port on all interfaces.
+ *
+ * @param udp  Pointer to the udp_pcb to bind.
+ * @param port Local UDP port number to bind.
+ * @return lwIP error code (ERR_OK on success).
+ */
 static int dhcp_socket_bind(struct udp_pcb **udp, uint16_t port) {
   // TODO convert lwIP errors to errno
   return udp_bind(*udp, IP_ANY_TYPE, port);
 }
 
+/**
+ * @brief Send a UDP datagram through the specified network interface.
+ *
+ * Allocates a pbuf, copies @p buf into it, then transmits to the destination.
+ * If @p nif is non-NULL, egress is forced through that interface (required for
+ * directed broadcast on multi-homed systems).
+ *
+ * @param udp  Pointer to the bound UDP control block.
+ * @param nif  Network interface to send through, or NULL for default routing.
+ * @param buf  Payload data to send.
+ * @param len  Payload length in bytes (clamped to UINT16_MAX internally).
+ * @param ip   Destination IPv4 address as a host-order 32-bit value.
+ * @param port Destination UDP port.
+ * @return Number of bytes sent on success, or a negative lwIP error code.
+ */
 static int dhcp_socket_sendto(struct udp_pcb **udp, struct netif *nif, const void *buf, size_t len, uint32_t ip, uint16_t port) {
   if (len > 0xffff) {
     len = 0xffff;
@@ -151,6 +191,16 @@ static int dhcp_socket_sendto(struct udp_pcb **udp, struct netif *nif, const voi
   return len;
 }
 
+/**
+ * @brief Search a DHCP options buffer for the first occurrence of an option tag.
+ *
+ * Walks the TLV-encoded options region, stopping at @c DHCP_OPT_END or after
+ * 308 bytes.
+ *
+ * @param opt  Start of the DHCP options field (after the 4-byte magic cookie).
+ * @param cmd  DHCP option tag byte to locate.
+ * @return Pointer to the first byte of the matching TLV, or NULL if not found.
+ */
 static uint8_t *opt_find(uint8_t *opt, uint8_t cmd) {
   for (int i = 0; i < 308 && opt[i] != DHCP_OPT_END;) {
     if (opt[i] == cmd) {
@@ -161,6 +211,16 @@ static uint8_t *opt_find(uint8_t *opt, uint8_t cmd) {
   return NULL;
 }
 
+/**
+ * @brief Append a DHCP option with an arbitrary-length value to the options buffer.
+ *
+ * Advances *@p opt past the written TLV on return.
+ *
+ * @param opt   Pointer to the current write position in the options buffer.
+ * @param cmd   DHCP option tag byte.
+ * @param n     Length of the value in bytes.
+ * @param data  Value bytes to copy.
+ */
 static void opt_write_n(uint8_t **opt, uint8_t cmd, size_t n, const void *data) {
   uint8_t *o = *opt;
   *o++ = cmd;
@@ -169,6 +229,13 @@ static void opt_write_n(uint8_t **opt, uint8_t cmd, size_t n, const void *data) 
   *opt = o + n;
 }
 
+/**
+ * @brief Append a one-byte DHCP option to the options buffer.
+ *
+ * @param opt  Pointer to the current write position in the options buffer.
+ * @param cmd  DHCP option tag byte.
+ * @param val  One-byte option value.
+ */
 static void opt_write_u8(uint8_t **opt, uint8_t cmd, uint8_t val) {
   uint8_t *o = *opt;
   *o++ = cmd;
@@ -177,6 +244,13 @@ static void opt_write_u8(uint8_t **opt, uint8_t cmd, uint8_t val) {
   *opt = o;
 }
 
+/**
+ * @brief Append a four-byte big-endian DHCP option to the options buffer.
+ *
+ * @param opt  Pointer to the current write position in the options buffer.
+ * @param cmd  DHCP option tag byte.
+ * @param val  32-bit option value; stored in network (big-endian) byte order.
+ */
 static void opt_write_u32(uint8_t **opt, uint8_t cmd, uint32_t val) {
   uint8_t *o = *opt;
   *o++ = cmd;
@@ -188,6 +262,19 @@ static void opt_write_u32(uint8_t **opt, uint8_t cmd, uint32_t val) {
   *opt = o;
 }
 
+/**
+ * @brief lwIP UDP receive callback; processes an incoming DHCP request.
+ *
+ * Handles DHCPDISCOVER (responds with DHCPOFFER) and DHCPREQUEST (responds
+ * with DHCPACK), assigning IP addresses from the server's lease pool. All
+ * other message types are silently dropped.
+ *
+ * @param arg       Pointer to the owning @ref dhcp_server_t instance.
+ * @param upcb      UDP control block (unused).
+ * @param p         Received DHCP message pbuf; ownership passes to this function.
+ * @param src_addr  Source IP address (unused — responses use broadcast).
+ * @param src_port  Source UDP port (unused).
+ */
 static void dhcp_server_process(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *src_addr, u16_t src_port) {
   dhcp_server_t *d = arg;
   (void)upcb;

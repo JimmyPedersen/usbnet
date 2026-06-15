@@ -26,15 +26,43 @@ typedef struct {
 	bool has_udp_report;
 } iperf_server_status_t;
 
-// Start TCP and UDP iperf listeners.
+/**
+ * @brief Start both TCP and UDP iperf2-compatible listeners on @ref IPERF_SERVER_PORT.
+ *
+ * @return true  At least one listener (TCP or UDP) started successfully.
+ * @return false Both TCP and UDP failed to start.
+ */
 bool iperf_server_start(void);
-// Stop all iperf listeners and finalize active sessions.
+
+/**
+ * @brief Stop all iperf listeners and finalize any active UDP session.
+ */
 void iperf_server_stop(void);
-// Read the latest status snapshot.
+
+/**
+ * @brief Obtain a snapshot of the latest iperf session metrics.
+ *
+ * The returned struct is a value copy; safe to read without additional
+ * synchronization.
+ *
+ * @return Copy of the internal @ref iperf_server_status_t.
+ */
 iperf_server_status_t iperf_server_get_status(void);
-// True if at least one iperf listener is active.
+
+/**
+ * @brief Check whether at least one iperf listener is currently active.
+ *
+ * @return true  TCP or UDP (or both) listeners are running.
+ * @return false No listeners are active.
+ */
 bool iperf_server_is_running(void);
-// Periodic housekeeping for UDP session timeout handling.
+
+/**
+ * @brief Drive UDP session housekeeping; call from the main loop.
+ *
+ * Detects UDP sessions idle longer than @c UDP_SESSION_IDLE_TIMEOUT_MS and
+ * finalizes them.
+ */
 void iperf_server_poll(void);
 
 #endif // IPERF_SERVER_H

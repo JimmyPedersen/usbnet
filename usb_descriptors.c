@@ -93,6 +93,11 @@ tusb_desc_device_t const desc_device = {
 
 // Invoked when received GET DEVICE DESCRIPTOR
 // Application return pointer to descriptor
+/**
+ * @brief TinyUSB callback: provide the USB device descriptor.
+ *
+ * @return Pointer to the static @ref desc_device descriptor.
+ */
 uint8_t const *tud_descriptor_device_cb(void) {
   return (uint8_t const *)&desc_device;
 }
@@ -180,6 +185,16 @@ static uint8_t const *const configuration_arr[2] = {
 // Invoked when received GET CONFIGURATION DESCRIPTOR
 // Application return pointer to descriptor
 // Descriptor contents must exist long enough for transfer to complete
+/**
+ * @brief TinyUSB callback: provide a USB configuration descriptor by index.
+ *
+ * Returns the RNDIS descriptor for index 0 and the ECM descriptor for index 1
+ * when ECM/RNDIS is enabled, or the NCM descriptor for index 0 otherwise.
+ *
+ * @param index  Zero-based configuration index requested by the host.
+ * @return Pointer to the matching configuration descriptor, or NULL if the
+ *         index is out of range.
+ */
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
   return (index < CONFIG_ID_COUNT) ? configuration_arr[index] : NULL;
 }
@@ -218,6 +233,14 @@ uint8_t const desc_bos[] = {
   // Microsoft OS 2.0 descriptor
   TUD_BOS_MS_OS_20_DESCRIPTOR(MS_OS_20_DESC_LEN, 1)};
 
+/**
+ * @brief TinyUSB callback: provide the BOS descriptor (NCM builds only).
+ *
+ * The BOS descriptor includes the Microsoft OS 2.0 capability descriptor
+ * which enables automatic driver loading on Windows 10+.
+ *
+ * @return Pointer to the static @ref desc_bos descriptor.
+ */
 uint8_t const *tud_descriptor_bos_cb(void) {
   return desc_bos;
 }
@@ -252,6 +275,18 @@ TU_VERIFY_STATIC(sizeof(desc_ms_os_20) == MS_OS_20_DESC_LEN, "Incorrect size");
 // Invoked when a control transfer occurred on an interface of this class
 // Driver response accordingly to the request and the transfer stage (setup/data/ack)
 // return false to stall control endpoint (e.g unsupported request)
+/**
+ * @brief TinyUSB callback: handle vendor control transfers (NCM builds only).
+ *
+ * Responds to the Microsoft OS 2.0 descriptor request so that Windows can
+ * automatically associate the NCM interface with the WINNCM driver.
+ *
+ * @param rhport   Root hub port number.
+ * @param stage    Control transfer stage (setup / data / ack).
+ * @param request  Pointer to the USB control request packet.
+ * @return true  Request handled; transfer proceeds.
+ * @return false Unknown request; the control endpoint will be stalled.
+ */
 bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const *request) {
   // nothing to with DATA & ACK stage
   if (stage != CONTROL_STAGE_SETUP) {
@@ -305,6 +340,19 @@ static uint16_t _desc_str[32 + 1];
 
 // Invoked when received GET STRING DESCRIPTOR request
 // Application return pointer to descriptor, whose contents must exist long enough for transfer to complete
+/**
+ * @brief TinyUSB callback: provide a USB string descriptor by index.
+ *
+ * Handles language ID, manufacturer, product, serial number (derived from the
+ * Pico board unique ID), interface description, and MAC address
+ * (index @c STRID_MAC).  All strings are returned as UTF-16LE with a
+ * length/type header word prepended.
+ *
+ * @param index   String descriptor index requested by the host.
+ * @param langid  Language ID (unused; only English is supported).
+ * @return Pointer to the internal UTF-16 string buffer, or NULL if the
+ *         index is not recognised.
+ */
 uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
   (void)langid;
   unsigned int chr_count = 0;

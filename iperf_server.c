@@ -34,6 +34,12 @@ typedef struct {
   uint32_t words[26];
 } iperf2_udp_ack_t;
 
+/**
+ * @brief Convert an lwiperf TCP report type to a human-readable string.
+ *
+ * @param report_type  lwiperf report type value.
+ * @return Pointer to a static string describing the report type.
+ */
 static const char *report_type_str(enum lwiperf_report_type report_type) {
   switch (report_type) {
   case LWIPERF_TCP_DONE_SERVER:
@@ -53,6 +59,22 @@ static const char *report_type_str(enum lwiperf_report_type report_type) {
   }
 }
 
+/**
+ * @brief lwiperf TCP session completion callback.
+ *
+ * Invoked by lwiperf when a TCP test finishes or aborts. Updates the internal
+ * status snapshot and prints a summary line on stdout.
+ *
+ * @param arg                User-supplied argument (unused).
+ * @param report_type        Reason the test ended (done, aborted, etc.).
+ * @param local_addr         Local IP address (unused).
+ * @param local_port         Local TCP port number.
+ * @param remote_addr        Remote IP address (unused).
+ * @param remote_port        Remote TCP port number.
+ * @param bytes_transferred  Total bytes transferred during the test.
+ * @param ms_duration        Test duration in milliseconds.
+ * @param bandwidth_kbitpsec Measured throughput in kbit/s.
+ */
 static void iperf_report_cb(void *arg, enum lwiperf_report_type report_type, const ip_addr_t *local_addr, u16_t local_port,
                             const ip_addr_t *remote_addr, u16_t remote_port, u32_t bytes_transferred, u32_t ms_duration,
                             u32_t bandwidth_kbitpsec) {
@@ -73,6 +95,16 @@ static void iperf_report_cb(void *arg, enum lwiperf_report_type report_type, con
          (unsigned long)bandwidth_kbitpsec);
 }
 
+/**
+ * @brief Finalize the active UDP iperf session and record its statistics.
+ *
+ * Computes bandwidth from the session byte count and elapsed time, fills in
+ * the status snapshot, prints a summary line, and clears the active flag.
+ * Does nothing if no session is currently active.
+ *
+ * @param reason  Short label printed in the summary (e.g. "end", "timeout").
+ * @param now_ms  Current system time in milliseconds.
+ */
 static void iperf_udp_finalize_session(const char *reason, uint32_t now_ms) {
   if (!udp_session_active) {
     return;
@@ -100,6 +132,17 @@ static void iperf_udp_finalize_session(const char *reason, uint32_t now_ms) {
   udp_session_active = false;
 }
 
+/**
+ * @brief Transmit an iperf2 UDP AckFIN packet to the client.
+ *
+ * Builds the iperf2 server-header reply and sends it to the client so the
+ * client can compute statistics on its side.
+ *
+ * @param addr     Destination IP address of the iperf client.
+ * @param port     Destination UDP port of the iperf client.
+ * @param last_seq Sequence number from the final client datagram.
+ * @param now_ms   Current system time in milliseconds.
+ */
 static void iperf_udp_send_ackfin(const ip_addr_t *addr, uint16_t port, uint32_t last_seq, uint32_t now_ms) {
   iperf2_udp_ack_t ack;
   memset(&ack, 0, sizeof(ack));
@@ -150,6 +193,19 @@ static void iperf_udp_send_ackfin(const ip_addr_t *addr, uint16_t port, uint32_t
   }
 }
 
+/**
+ * @brief lwIP UDP receive callback for the iperf server.
+ *
+ * Tracks packet counts, byte counts, and out-of-order sequence numbers for
+ * the active session.  On receipt of a final datagram (MSB of the sequence
+ * number set by the client), sends an AckFIN and finalizes the session.
+ *
+ * @param arg   User-supplied argument (unused).
+ * @param upcb  UDP control block (unused).
+ * @param p     Received datagram buffer; ownership passes to this function.
+ * @param addr  Source IP address of the datagram.
+ * @param port  Source UDP port of the datagram.
+ */
 static void iperf_udp_recv_cb(void *arg, struct udp_pcb *upcb, struct pbuf *p, const ip_addr_t *addr, uint16_t port) {
   (void)arg;
   (void)upcb;

@@ -7,7 +7,14 @@
 
 static struct tcp_pcb *telnet_listener;
 
-// Convert alphabetic ASCII characters while leaving other bytes untouched.
+/**
+ * @brief Convert a single ASCII character to the opposite case.
+ *
+ * Non-alphabetic characters are returned unchanged.
+ *
+ * @param c Input character.
+ * @return The alphabetically-inverted character, or @p c if non-alphabetic.
+ */
 static char invert_case_char(char c) {
   if (c >= 'a' && c <= 'z') {
     return (char)(c - ('a' - 'A'));
@@ -18,6 +25,18 @@ static char invert_case_char(char c) {
   return c;
 }
 
+/**
+ * @brief lwIP receive callback for a telnet connection.
+ *
+ * Iterates over every byte in the received buffer chain, inverts its case,
+ * and writes the result back to the TCP stream.
+ *
+ * @param arg   User-supplied argument (unused).
+ * @param tpcb  TCP connection control block.
+ * @param p     Received data buffer chain, or NULL if the remote end closed.
+ * @param err   Error code from lwIP; ERR_OK on normal reception.
+ * @return ERR_OK on success, or the lwIP error that occurred.
+ */
 static err_t telnet_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
   (void)arg;
 
@@ -64,6 +83,14 @@ static err_t telnet_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err
   return ERR_OK;
 }
 
+/**
+ * @brief lwIP accept callback; registers the receive handler for the new connection.
+ *
+ * @param arg    User-supplied argument (unused).
+ * @param newpcb TCP control block for the newly accepted connection.
+ * @param err    Error code passed by lwIP; ERR_OK on success.
+ * @return ERR_OK, or @p err if it indicates a failure.
+ */
 static err_t telnet_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err) {
   (void)arg;
 

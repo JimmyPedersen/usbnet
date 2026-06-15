@@ -20,6 +20,16 @@ static const ip4_addr_t gateway = IPADDR4_INIT_BYTES(0, 0, 0, 0);
 #define TELNET_PORT 23
 #define STATUS_INTERVAL_MS 5000
 
+/**
+ * @brief Application entry point.
+ *
+ * Initialises the USB network adapter, DHCP server, mDNS responder, HTTP
+ * server, telnet server, and iperf server. Then enters a polling loop that
+ * services all stack layers, prints a periodic status line on UART, and
+ * shuts down cleanly when 's' or 'S' is received on UART.
+ *
+ * @return 0 on clean shutdown, -1 if a mandatory service failed to start.
+ */
 int main() {
   stdio_uart_init();
 

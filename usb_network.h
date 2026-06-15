@@ -35,13 +35,44 @@ extern "C" {
 #include <lwip/ip.h>
 #include <stdbool.h>
 
-// Initialize TinyUSB + lwIP network bridge with static IPv4 settings.
+/**
+ * @brief Initialize TinyUSB and add a lwIP network interface for USB networking.
+ *
+ * Generates a locally-administered MAC address from the board's unique ID,
+ * creates a lwIP netif, and blocks until the interface reports as up.
+ *
+ * @param ownip     IPv4 address to assign to the device interface.
+ * @param netmask   Subnet mask for the interface.
+ * @param gateway   Default gateway address (use 0.0.0.0 if none).
+ * @param init_lwip If true, calls lwip_init() before adding the netif.
+ *                  Pass false when lwIP was already initialized (e.g. by cyw43).
+ * @return true  Network interface started and is up.
+ * @return false TinyUSB initialization or lwIP netif creation failed.
+ */
 bool usb_network_init(const ip4_addr_t *ownip, const ip4_addr_t *netmask, const ip4_addr_t *gateway, bool init_lwip);
-// Report whether the USB device stack is ready.
+
+/**
+ * @brief Check whether the USB device stack is enumerated and ready.
+ *
+ * @return true  TinyUSB reports the device is ready (connected to a host).
+ * @return false Device is not yet connected or has been disconnected.
+ */
 bool usb_network_is_up();
-// Pump TinyUSB and lwIP timers; call frequently from the main loop.
+
+/**
+ * @brief Drive TinyUSB and lwIP processing; must be called from the main loop.
+ *
+ * Calls tud_task() to handle USB events, then passes any buffered Ethernet
+ * frames up the lwIP stack and services lwIP software timers.
+ */
 void usb_network_update();
-// Tear down USB network state and remove lwIP netif.
+
+/**
+ * @brief Tear down the USB network interface and release lwIP resources.
+ *
+ * Removes the lwIP netif and deinitializes TinyUSB. Safe to call even if
+ * initialization never completed.
+ */
 void usb_network_deinit();
 
 #ifdef __cplusplus

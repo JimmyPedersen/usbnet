@@ -53,9 +53,26 @@ typedef struct _dhcp_server_t {
     struct udp_pcb *udp;
 } dhcp_server_t;
 
-// Initialize DHCP server state and start listening on UDP port 67.
+/**
+ * @brief Initialize and start the DHCP server.
+ *
+ * Copies the IP/netmask configuration into the state structure, clears the
+ * lease table, opens a UDP socket on port 67 (BOOTP server port), and
+ * registers the packet handler.
+ *
+ * @param d                  DHCP server state structure to initialize.
+ * @param ip                 IPv4 address of the server / gateway to advertise.
+ * @param nm                 Subnet mask to advertise to clients.
+ * @param set_router_and_dns If true, also advertises this server as the default
+ *                           router and DNS server in DHCP responses.
+ */
 void dhcp_server_init(dhcp_server_t *d, ip_addr_t *ip, ip_addr_t *nm, bool set_router_and_dns);
-// Stop DHCP service and release associated UDP resources.
+
+/**
+ * @brief Stop the DHCP server and free its UDP socket resources.
+ *
+ * @param d DHCP server state previously initialized with dhcp_server_init().
+ */
 void dhcp_server_deinit(dhcp_server_t *d);
 
 #ifdef __cplusplus

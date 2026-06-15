@@ -7,6 +7,18 @@
 
 static struct tcp_pcb *http_listener;
 
+/**
+ * @brief lwIP receive callback for an HTTP connection.
+ *
+ * Consumes the incoming request, writes a static HTTP 200 response,
+ * then closes the connection.
+ *
+ * @param arg   User-supplied argument (unused).
+ * @param tpcb  TCP connection control block.
+ * @param p     Received data buffer chain, or NULL if the remote end closed.
+ * @param err   Error code from lwIP; ERR_OK on normal reception.
+ * @return ERR_OK on success, or the lwIP error that occurred.
+ */
 static err_t http_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err) {
   (void)arg;
 
@@ -43,6 +55,14 @@ static err_t http_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t
   return write_err;
 }
 
+/**
+ * @brief lwIP accept callback; registers the receive handler for the new connection.
+ *
+ * @param arg    User-supplied argument (unused).
+ * @param newpcb TCP control block for the newly accepted connection.
+ * @param err    Error code passed by lwIP; ERR_OK on success.
+ * @return ERR_OK, or @p err if it indicates a failure.
+ */
 static err_t http_accept_cb(void *arg, struct tcp_pcb *newpcb, err_t err) {
   (void)arg;
 

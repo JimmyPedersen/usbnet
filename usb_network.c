@@ -55,6 +55,16 @@ static struct pbuf *received_frame;
 
 // network interface functions:
 
+/**
+ * @brief lwIP netif link-output callback; forwards an Ethernet frame to TinyUSB.
+ *
+ * Spins until TinyUSB has buffer space, calling tud_task() each iteration to
+ * drain pending USB transfers.
+ *
+ * @param netif Unused (required by the lwIP netif interface).
+ * @param p     pbuf chain containing the Ethernet frame to transmit.
+ * @return ERR_OK on successful hand-off, ERR_USE if the device is not ready.
+ */
 static err_t tud_output(__unused struct netif *netif, struct pbuf *p) {
   for (;;) {
     // if TinyUSB isn't ready, signal back to lwip that there is nothing to do
@@ -74,6 +84,14 @@ static err_t tud_output(__unused struct netif *netif, struct pbuf *p) {
   }
 }
 
+/**
+ * @brief lwIP netif initialisation callback; populates interface properties.
+ *
+ * Sets the MTU, flags, interface name, and output callbacks required by lwIP.
+ *
+ * @param netif The netif being initialized; must not be NULL.
+ * @return ERR_OK always.
+ */
 static err_t netif_init_cb(struct netif *netif) {
   LWIP_ASSERT("netif != NULL", (netif != NULL));
   netif->mtu = CFG_TUD_NET_MTU;
@@ -99,6 +117,12 @@ static err_t netif_init_cb(struct netif *netif) {
 
 // driver callbacks:
 
+/**
+ * @brief TinyUSB network re-initialisation callback.
+ *
+ * Called by TinyUSB when the network class driver is reset (e.g. on USB
+ * re-enumeration). Discards any partially-received packet held in the buffer.
+ */
 void tud_network_init_cb() {
   // if the network is re-initialising and there is a leftover packet, perform a cleanup
   if (received_frame) {
@@ -107,6 +131,18 @@ void tud_network_init_cb() {
   }
 }
 
+/**
+ * @brief TinyUSB callback invoked when a complete Ethernet frame has been received.
+ *
+ * Allocates a lwIP pbuf and copies the frame bytes into it for later processing
+ * by service_traffic(). Returns false to signal the driver should hold off
+ * delivering another packet until the current one is consumed.
+ *
+ * @param src  Pointer to the raw received frame data.
+ * @param size Frame length in bytes.
+ * @return true  Frame accepted (or zero-length frame ignored).
+ * @return false A previously received frame has not yet been processed.
+ */
 bool tud_network_recv_cb(const uint8_t *src, uint16_t size) {
   // this shouldn't happen, but if receive another packet before
   // parsing the previous one, signal cannot accept
@@ -129,6 +165,14 @@ bool tud_network_recv_cb(const uint8_t *src, uint16_t size) {
   return true;
 }
 
+/**
+ * @brief TinyUSB callback that copies a pbuf chain into the USB transmit buffer.
+ *
+ * @param dst  Destination buffer provided by TinyUSB.
+ * @param ref  Pointer to the pbuf chain to copy (cast from void *).
+ * @param arg  Unused additional argument.
+ * @return Number of bytes written to @p dst.
+ */
 uint16_t tud_network_xmit_cb(uint8_t *dst, void *ref, uint16_t arg) {
   struct pbuf *p = (struct pbuf *)ref;
 
@@ -139,6 +183,12 @@ uint16_t tud_network_xmit_cb(uint8_t *dst, void *ref, uint16_t arg) {
 
 // usb network api:
 
+/**
+ * @brief Pass any buffered received frame up the lwIP stack and service timers.
+ *
+ * If a frame was stored by tud_network_recv_cb(), hands it to the netif input
+ * function and renews the TinyUSB receive slot.  Then drives lwIP timeouts.
+ */
 static inline void service_traffic() {
   // handle any packet received by tud_network_recv_cb()
   if (received_frame) {
