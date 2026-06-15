@@ -38,8 +38,12 @@ pico_sdk_init()
 add_executable(usbnet
     main.c
     usb_network.c
+    http_server.c
+    telnet_server.c
+    iperf_server.c
     usb_descriptors.c
     dhcpserver/dhcpserver.c
+    ${PICO_SDK_PATH}/lib/lwip/src/apps/lwiperf/lwiperf.c
     ${PICO_TINYUSB_PATH}/lib/networking/rndis_reports.c
 )
 
