@@ -1,3 +1,4 @@
+// TinyUSB device-stack configuration for USB ECM/RNDIS or NCM networking.
 /*
  * The MIT License (MIT)
  *

@@ -26,6 +26,7 @@
  */
 
 // modified by Matt
+// DHCP server API used by the USB network demo application.
 
 #ifndef DHCPSERVER_H
 #define DHCPSERVER_H
@@ -52,7 +53,9 @@ typedef struct _dhcp_server_t {
     struct udp_pcb *udp;
 } dhcp_server_t;
 
+// Initialize DHCP server state and start listening on UDP port 67.
 void dhcp_server_init(dhcp_server_t *d, ip_addr_t *ip, ip_addr_t *nm, bool set_router_and_dns);
+// Stop DHCP service and release associated UDP resources.
 void dhcp_server_deinit(dhcp_server_t *d);
 
 #ifdef __cplusplus

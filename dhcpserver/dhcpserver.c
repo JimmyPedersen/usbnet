@@ -29,6 +29,8 @@
 //  https://www.ietf.org/rfc/rfc2131.txt
 //  https://tools.ietf.org/html/rfc2132 -- DHCP Options and BOOTP Vendor Extensions
 
+// Lightweight single-subnet DHCP server for the USB network interface.
+
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>

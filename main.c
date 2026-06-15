@@ -1,3 +1,4 @@
+// Entry point that brings up USB networking and demo network services.
 #include <hardware/uart.h>
 #include <lwip/apps/mdns.h>
 #include <lwip/ip.h>
@@ -10,7 +11,7 @@
 #include "telnet_server.h"
 #include "usb_network.h"
 
-// usb network addresses
+// Static IPv4 configuration used by the device-side USB network interface.
 static const ip4_addr_t ownip = IPADDR4_INIT_BYTES(192, 168, 7, 1);
 static const ip4_addr_t netmask = IPADDR4_INIT_BYTES(255, 255, 255, 0);
 static const ip4_addr_t gateway = IPADDR4_INIT_BYTES(0, 0, 0, 0);

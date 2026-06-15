@@ -149,6 +149,7 @@ static inline void service_traffic() {
     tud_network_recv_renew();
   }
 
+  // Drive lwIP software timers in NO_SYS mode.
   sys_check_timeouts();
 }
 
@@ -171,7 +172,7 @@ bool usb_network_init(const ip4_addr_t *ownip, const ip4_addr_t *netmask, const 
     lwip_init(); // only initialise lwIP if not already done so e.g. by cyw43_arch_init()
   }
 
-  // generate new tud_network_mac_address from pico board_id, as in cyw43_hal_generate_laa_mac()
+  // Derive a stable locally-administered MAC from the unique board ID.
   pico_unique_board_id_t board_id;
   pico_get_unique_board_id(&board_id);
   memcpy(tud_network_mac_address, &board_id.id[2], 6);

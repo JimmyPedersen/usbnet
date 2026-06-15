@@ -1,3 +1,4 @@
+// Minimal HTTP server that always returns a static page.
 #include "http_server.h"
 
 #include <lwip/ip_addr.h>
@@ -22,6 +23,7 @@ static err_t http_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t
     return ERR_OK;
   }
 
+  // Keep the response static to avoid allocations in the RX callback path.
   static const char response[] =
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: text/html; charset=utf-8\r\n"

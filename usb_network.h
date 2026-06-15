@@ -35,9 +35,13 @@ extern "C" {
 #include <lwip/ip.h>
 #include <stdbool.h>
 
+// Initialize TinyUSB + lwIP network bridge with static IPv4 settings.
 bool usb_network_init(const ip4_addr_t *ownip, const ip4_addr_t *netmask, const ip4_addr_t *gateway, bool init_lwip);
+// Report whether the USB device stack is ready.
 bool usb_network_is_up();
+// Pump TinyUSB and lwIP timers; call frequently from the main loop.
 void usb_network_update();
+// Tear down USB network state and remove lwIP netif.
 void usb_network_deinit();
 
 #ifdef __cplusplus

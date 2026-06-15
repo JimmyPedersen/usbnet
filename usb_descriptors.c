@@ -1,3 +1,4 @@
+// TinyUSB descriptors for exposing the Pico as a USB network adapter.
 /*
  * The MIT License (MIT)
  *
@@ -45,6 +46,7 @@ enum {
   STRID_PRODUCT,
   STRID_SERIAL,
   STRID_INTERFACE,
+  // USB string descriptor that carries the device MAC in hex for ECM/NCM.
   STRID_MAC
 };
 

@@ -1,3 +1,4 @@
+// Simple TCP echo service that returns input with inverted letter case.
 #include "telnet_server.h"
 
 #include <lwip/ip_addr.h>
@@ -6,6 +7,7 @@
 
 static struct tcp_pcb *telnet_listener;
 
+// Convert alphabetic ASCII characters while leaving other bytes untouched.
 static char invert_case_char(char c) {
   if (c >= 'a' && c <= 'z') {
     return (char)(c - ('a' - 'A'));

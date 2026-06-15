@@ -1,3 +1,4 @@
+// iperf2-compatible TCP and UDP throughput server using lwIP.
 #include "iperf_server.h"
 
 #include <lwip/apps/lwiperf.h>
@@ -29,6 +30,7 @@ static bool udp_seq_initialized;
 #define IPERF2_HEADER_VERSION1 0x80000000UL
 
 typedef struct {
+  // Packed iperf2 AckFIN payload represented as 32-bit network-order words.
   uint32_t words[26];
 } iperf2_udp_ack_t;
 
@@ -80,6 +82,7 @@ static void iperf_udp_finalize_session(const char *reason, uint32_t now_ms) {
   if (duration_ms == 0) {
     duration_ms = 1;
   }
+  // kbit/s = bits/ms, because 1 bit/ms equals 1 kbit/s.
   uint32_t bandwidth_kbitpsec = (uint32_t)(((uint64_t)udp_session_bytes * 8U) / duration_ms);
 
   iperf_status.has_udp_report = true;
